@@ -2,13 +2,14 @@ import asyncio
 import sys
 
 from typing import List
-from eva.server.db_api import connect, connect_async
+from eva.server.db_api import *#, connect_async
 
 async def run_async(query: List[str]):
     hostname = '0.0.0.0'
     port = 5432
 
-    connection = await connect_async(hostname, port)
+    #connection = await connect_async(hostname, port)
+    connection = await get_connection(hostname, port)
     cursor = connection.cursor()
     for onequery in query:
         await cursor.execute_async(onequery)
@@ -34,9 +35,10 @@ if __name__ == '__main__':
                        PATH "test_video.mp4";',
                'LOAD DATA INFILE "test_video.mp4" INTO MyVideo;',
                'SELECT id,data FROM MyVideo WHERE id < 5;']
-
+    '''
     if sys.argv[1] != 'sync':
         asyncio.run(run_async(queries))
     else:
         run([queries])
-
+    '''
+    asyncio.run(run_async(queries))
