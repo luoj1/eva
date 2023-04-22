@@ -71,6 +71,7 @@ class FrigateApp:
 
     def init_config(self) -> None:
         config_file = os.environ.get("CONFIG_FILE", "/config/config.yml")
+        #config_file = os.environ.get("CONFIG_FILE", "/experiment_env/config.yml")
 
         # Check if we can use .yaml instead of .yml
         config_file_yaml = config_file.replace(".yml", ".yaml")
@@ -300,9 +301,9 @@ class FrigateApp:
         self.event_cleanup = EventCleanup(self.config, self.stop_event)
         self.event_cleanup.start()
 
-    def start_recording_maintainer(self) -> None:
+    def start_recording_maintainer(self, eva_cursor=None) -> None:
         self.recording_maintainer = RecordingMaintainer(
-            self.config, self.recordings_info_queue, self.stop_event
+            self.config, self.recordings_info_queue, self.stop_event, eva_cursor=eva_cursor
         )
         self.recording_maintainer.start()
 
@@ -326,6 +327,17 @@ class FrigateApp:
     def start_watchdog(self) -> None:
         self.frigate_watchdog = FrigateWatchdog(self.detectors, self.stop_event)
         self.frigate_watchdog.start()
+
+    def connect_eva(self) -> None:
+        from eva.server.db_api import connect
+        import nest_asyncio
+        nest_asyncio.apply()
+
+        # Connect client with server
+        connection = connect(host = '127.0.0.1', port = 5432) 
+        cursor = connection.cursor()
+
+        return cursor
 
     def check_shm(self) -> None:
         available_shm = round(shutil.disk_usage("/dev/shm").total / 1000000, 1)
@@ -376,6 +388,10 @@ class FrigateApp:
             print(e)
             self.log_process.terminate()
             sys.exit(1)
+
+        # connect to EVA
+        cursor = self.connect_eva()
+
         self.start_detectors()
         self.start_video_output_processor()
         self.start_detected_frames_processor()

@@ -8,20 +8,20 @@ services:
       - "110" # render
       - "44"  # video
       - "46"  # plugdev
-    shm_size: "256mb"
+    shm_size: "1024mb"
     build:
       context: .
       # Use target devcontainer-trt for TensorRT dev
       target: devcontainer
-    deploy:
-          resources:
-              reservations:
-                  devices:
-                      - driver: nvidia
-                        count: 1
-                        capabilities: [gpu]
+    #deploy:
+    #      resources:
+    #          reservations:
+    #              devices:
+    #                  - driver: nvidia
+    #                    count: 1
+    #                    capabilities: [gpu]
     devices:
-      - /dev/bus/usb:/dev/bus/usb
+      - /dev/video0:/dev/video0
       # - /dev/dri:/dev/dri # for intel hwaccel, needs to be updated for your hardware
     volumes:
       - .:/workspace/frigate:cached
@@ -31,9 +31,24 @@ services:
       - ./debug:/media/frigate
       # Create the trt-models folder using the documented method of generating TRT models
       # - ./debug/trt-models:/trt-models
-      - /dev/bus/usb:/dev/bus/usb
+      #- /dev/bus/usb:/dev/bus/usb
+    ports:
+      - "8559:8559"
+      - "1939:1939"
   mqtt:
     container_name: mqtt
     image: eclipse-mosquitto:1.6
     ports:
       - "1883:1883"
+
+# dependecy; wget https://github.com/aler9/mediamtx/releases/download/v0.22.0/mediamtx_v0.22.0_linux_amd64.tar.gz
+# dependency:  apt update; apt install libavcodec58 libchromaprint1 libcairo-gobject2 libcairo2=1.16.0-5; apt install ffmpeg
+# SELECT id, frame FROM test_frigate_20230414183815 WHERE ['face'] <@ FastRCNNObjectDetector(frame).labels ORDER BY id;
+# SELECT id FROM test_frigate_20230414183815 WHERE ArrayCount(FastRCNNObjectDetector(data).label, 'face') > 0 ORDER BY id;
+
+# SELECT id FROM  test_frigate_20230414190812 WHERE ['person'] <@ FastRCNNObjectDetector(data).labels ORDER BY id;
+# SELECT id FROM test_frigate_20230414190812 WHERE ArrayCount(FastRCNNObjectDetector(data).labels, 'face') > 0 ORDER BY id;
+
+# SELECT id, FastRCNNObjectDetector(data).labels FROM test_frigate_20230414190812 ;
+
+# SELECT id, FastRCNNObjectDetector(data).labels FROM test_frigate_20230414183825;

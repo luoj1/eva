@@ -19,6 +19,8 @@ from frigate.const import CACHE_DIR, MAX_SEGMENT_DURATION, RECORD_DIR
 from frigate.models import Event, Recordings
 from frigate.util import area
 
+import shutil
+
 logger = logging.getLogger(__name__)
 
 SECONDS_IN_DAY = 60 * 60 * 24
@@ -39,12 +41,22 @@ def remove_empty_directories(directory):
         if len(os.listdir(path)) == 0:
             os.rmdir(path)
 
+def connect_to_server():
+    from eva.server.db_api import connect
+    #import nest_asyncio
+    #nest_asyncio.apply()
 
+    # Connect client with server
+    connection = connect(host = '127.0.0.1', port = 5432) 
+    cursor = connection.cursor()
+
+    return cursor
 class RecordingMaintainer(threading.Thread):
     def __init__(
-        self, config: FrigateConfig, recordings_info_queue: mp.Queue, stop_event
+        self, config: FrigateConfig, recordings_info_queue: mp.Queue, stop_event, eva_cursor=None
     ):
         threading.Thread.__init__(self)
+        #self.eva_cursor = eva_cursor
         self.name = "recording_maint"
         self.config = config
         self.recordings_info_queue = recordings_info_queue
@@ -62,7 +74,12 @@ class RecordingMaintainer(threading.Thread):
                 and not d.startswith("clip_")
             ]
         )
-
+        print(cache_files)
+        #store cache files in eva
+        #for f in cache_files:
+        #    name = f.split('.')[0] 
+        #    q = f'LOAD VIDEO \"{}\" INTO ObjectDetectionVideos;'
+        #    self.cursor.execute(q)
         files_in_use = []
         for process in psutil.process_iter():
             try:
@@ -86,6 +103,16 @@ class RecordingMaintainer(threading.Thread):
             cache_path = os.path.join(CACHE_DIR, f)
             basename = os.path.splitext(f)[0]
             camera, date = basename.rsplit("-", maxsplit=1)
+
+            eva_name = 'test_frigate_'+date
+            perm_path='/workspace'+cache_path
+            shutil.copy(cache_path, perm_path)
+            q = f'LOAD VIDEO \"{perm_path}\" INTO {eva_name};'
+            print('eva store', q)
+            self.eva_cursor.execute(q)
+            response = self.eva_cursor.fetch_all()
+            print(response)
+            #camera, date = basename.rsplit("-", maxsplit=1)
             start_time = datetime.datetime.strptime(date, "%Y%m%d%H%M%S")
 
             grouped_recordings[camera].append(
@@ -344,6 +371,7 @@ class RecordingMaintainer(threading.Thread):
                 rand_id = "".join(
                     random.choices(string.ascii_lowercase + string.digits, k=6)
                 )
+                print("create recordin", f"{start_time.timestamp()}-{rand_id}")
                 Recordings.create(
                     id=f"{start_time.timestamp()}-{rand_id}",
                     camera=camera,
@@ -365,6 +393,7 @@ class RecordingMaintainer(threading.Thread):
         self.end_time_cache.pop(cache_path, None)
 
     def run(self):
+        self.eva_cursor = connect_to_server()
         # Check for new files every 5 seconds
         wait_time = 5
         while not self.stop_event.wait(wait_time):
@@ -381,6 +410,7 @@ class RecordingMaintainer(threading.Thread):
                         regions,
                     ) = self.recordings_info_queue.get(False)
 
+                    #print('is recording set', self.config.cameras[camera].record.enabled)
                     if self.config.cameras[camera].record.enabled:
                         self.recordings_info[camera].append(
                             (
@@ -391,6 +421,7 @@ class RecordingMaintainer(threading.Thread):
                             )
                         )
                 except queue.Empty:
+                    print('q empty')
                     break
 
             try:

@@ -9,5 +9,5 @@ s6-svc -O .
 
 while true; do
   echo "[INFO] The fake Frigate service is running..."
-  sleep 5s
+  sleep 10s
 done
