@@ -29,6 +29,7 @@ from eva.utils.stats import Timer
 import subprocess as sp
 import time
 import psutil
+import shutil
 from collections import defaultdict
 import datetime
 from pathlib import Path
@@ -190,6 +191,62 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
     start = time.time()   
     elapsed = 0
     while elapsed < 10:
+        #scan file
+        CACHE_DIR = '/media/james/p0/eva_tmp/cache'
+        PERM_DIR =  '/media/james/p0/eva_tmp/perm'
+        cache_files = sorted(
+            [
+                d
+                for d in os.listdir(CACHE_DIR)
+                if os.path.isfile(os.path.join(CACHE_DIR, d))
+                and d.endswith(".mp4")
+                and not d.startswith("clip_")
+            ]
+        )
+
+        files_in_use = []
+        for process in psutil.process_iter():
+            try:
+                if process.name() != "ffmpeg":
+                    continue
+                flist = process.open_files()
+                if flist:
+                    for nt in flist:
+                        if nt.path.startswith(CACHE_DIR):
+                            files_in_use.append(nt.path.split("/")[-1])
+            except:
+                continue
+
+        for f in cache_files:
+        # Skip files currently in use
+            if f in files_in_use:
+                continue
+
+            cache_path = os.path.join(CACHE_DIR, f)
+            perm_path = os.path.join(PERM_DIR, f)
+            shutil.copyfile(cache_path, perm_path)
+
+            basename = os.path.splitext(f)[0]
+            camera, date = basename.rsplit("-", maxsplit=1)
+            start_time = datetime.datetime.strptime(date, "%Y%m%d%H%M%S")
+            # do load
+            basename_san = basename.split('-')
+            basename_san = basename_san[0]+"_"+basename_san[1]
+
+            load_query = 'LOAD VIDEO \"' + perm_path + '\" INTO ' + basename_san + ';'
+            print('load',load_query )
+            try:
+                output = execute_query(load_query, report_time=False, **kwargs)
+                if output:
+                    batch_list = list(output)
+                    print('load webcam: ',batch_list)
+            except Exception as e:
+                print('load webcam stopped by bad mp4 when process running')
+                error_msg = str(e)
+                logger.warn(error_msg)
+                #return
+            os.remove(cache_path)
+        
         elapsed = time.time() - start
         time.sleep(1)  
     process.kill()
@@ -197,6 +254,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
 
     # scan files
     CACHE_DIR = '/media/james/p0/eva_tmp/cache'
+    PERM_DIR =  '/media/james/p0/eva_tmp/perm'
     cache_files = sorted(
         [
             d
@@ -221,20 +279,23 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
             continue
 
     # group recordings by camera
-    grouped_recordings = defaultdict(list)
+    # grouped_recordings = defaultdict(list)
     for f in cache_files:
         # Skip files currently in use
         if f in files_in_use:
             continue
 
         cache_path = os.path.join(CACHE_DIR, f)
+        perm_path = os.path.join(PERM_DIR, f)
+        shutil.copyfile(cache_path, perm_path)
+
         basename = os.path.splitext(f)[0]
         camera, date = basename.rsplit("-", maxsplit=1)
         start_time = datetime.datetime.strptime(date, "%Y%m%d%H%M%S")
         # do load
         basename_san = basename.split('-')
         basename_san = basename_san[0]+"_"+basename_san[1]
-        load_query = 'LOAD VIDEO \"' + cache_path + '\" INTO ' + basename_san + ';'
+        load_query = 'LOAD VIDEO \"' + perm_path + '\" INTO ' + basename_san + ';'
         print('load',load_query )
         try:
             output = execute_query(load_query, report_time=False, **kwargs)
@@ -245,14 +306,17 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
             print('load webcam stopped by corrupted mp4')
             error_msg = str(e)
             logger.warn(error_msg)
-            return
+            os.remove(perm_path)
 
+        os.remove(cache_path)
+        '''
         grouped_recordings[camera].append(
             {
                 "cache_path": cache_path,
                 "start_time": start_time,
             }
         )
+        '''
 
 
     # convert load webcam query to a number of load video
