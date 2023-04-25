@@ -37,7 +37,7 @@ class EvaServer:
         hostname: hostname of the server
         port: port of the server
         """
-        logger.info("Start Server")
+        logger.info("Start Server GG")
 
         self._server = await asyncio.start_server(self.accept_client, host, port)
 
@@ -70,7 +70,7 @@ class EvaServer:
     ):
         try:
             while True:
-                data = await asyncio.wait_for(client_reader.readline(), timeout=60.0)
+                data = await asyncio.wait_for(client_reader.readline(), timeout=120.0)
                 if data == b"":
                     break
 

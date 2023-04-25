@@ -68,7 +68,7 @@ class EVACursor(object):
         fetch_all is the same as fetch_one for now.
         """
         return await self.fetch_one_async()        
-
+    '''
     async def fetch_all_async(self, size) -> Response:
         """
         fetch_all is the same as fetch_one for now.
@@ -84,7 +84,7 @@ class EVACursor(object):
         response = Response.deserialize(message)
         self._pending_query = False
         return response
-            
+    '''        
 
     def _multiline_query_transformation(self, query: str) -> str:
         query = query.replace("\n", " ")
