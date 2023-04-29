@@ -38,7 +38,7 @@ import shlex
 
 import logging
 import threading
-import os
+import os, signal
 import signal
 import queue
 import multiprocessing as mp
@@ -199,7 +199,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
         stdout=sp.DEVNULL,
         stderr=logpipe,
         stdin=sp.DEVNULL,
-        start_new_session=True,
+        #start_new_session=True,
     )
     print('ffmep_cmd exec. Status: ', process.returncode)
 
@@ -216,7 +216,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
                 and not d.startswith("clip_")
             ]
         )
-
+        print('cache f len', len(cache_files))
         files_in_use = []
         for process in psutil.process_iter():
             try:
@@ -261,8 +261,25 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
             os.remove(cache_path)
         
         elapsed = time.time() - start
+        print('el', elapsed)
         time.sleep(1)  
-    process.kill()
+    
+    print('stopping proc....')
+    #process.terminate()
+    #process.kill()
+    #time.sleep(5)
+    killed = False
+    while not killed:
+        try:
+            #process.terminate()
+            #process.kill()
+            os.kill(process.pid,15)
+            os.kill(process.pid,9)
+            killed = True
+        except Exception as e:
+                print(str(e))
+        #os.waitpid(process.pid, os.WSTOPPED)
+
     print('ffmep_cmd stop ')
 
     # last scan
@@ -275,7 +292,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
             and not d.startswith("clip_")
         ]
     )
-
+    print('final size ', len(cache_files))
     files_in_use = []
     for process in psutil.process_iter():
         try:
@@ -292,12 +309,13 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
     # group recordings by camera
     # grouped_recordings = defaultdict(list)
     for f in cache_files:
+        cache_path = os.path.join(CACHE_DIR, f)
         # Skip files currently in use
         if f in files_in_use:
             os.remove(cache_path)
             continue
 
-        cache_path = os.path.join(CACHE_DIR, f)
+        
         perm_path = os.path.join(PERM_DIR, f)
         shutil.copyfile(cache_path, perm_path)
 
