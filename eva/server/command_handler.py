@@ -33,6 +33,8 @@ import shutil
 from collections import defaultdict
 import datetime
 from pathlib import Path
+import re
+import shlex
 
 import logging
 import threading
@@ -162,23 +164,36 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
     """
     # setup camera
     logpipe = LogPipe(
-        "ffmpeg.cam1"
+        "ffmpeg.cam"
     )
+
+    # simple parser TODO: parse the line in eva style
+    # LOAD WEBCAM "rtsp://localhost:8558/stream" CACHE "/media/james/p0/eva_tmp/cache" STORE "/media/james/p0/eva_tmp/perm";
+    q_array = shlex.split(query)
+    if q_array[0]!='LOAD' or q_array[1]!='WEBCAM' or q_array[3]!='CACHE' or q_array[5]!='STORE':
+        logger.warn("load webcam fail due to illegal format load webcam query")
+        return 
     '''
-    ffmpeg_cmd = ['ffmpeg', '-hide_banner', '-loglevel', 'warning', '-threads', '1', 
-     '-user_agent', 'FFmpeg Frigate/0.1x', '-avoid_negative_ts', 'make_zero', 
-     '-fflags', '+genpts+discardcorrupt', '-rtsp_transport', 'tcp', 
-     '-timeout', '5000000', '-use_wallclock_as_timestamps', '1', 
-     '-i', 'rtsp://localhost:8554/stream', '-f', 'segment', '-segment_time', '5', 
-     '-segment_format', 'mp4', '-reset_timestamps', '1', '-strftime', '1', 
-     '-c', 'copy', '-an', '/media/james/p0/eva_tmp/cache/camera_1-%Y%m%d%H%M%S.mp4', '-r', '5', '-s', '1280x720', '-threads', '1', 
-     '-f', 'rawvideo', '-pix_fmt', 'yuv420p', 'pipe:']
+    CACHE_DIR = '/media/james/p0/eva_tmp/cache'
+    PERM_DIR =  '/media/james/p0/eva_tmp/perm'
+    CACHE_MP4 = os.path.join(CACHE_DIR,'camera-%Y%m%d%H%M%S.mp4')
+    RTSP_ADDR = 'rtsp://localhost:8558/stream'
     '''
-    ffmpeg_cmd = ['ffmpeg', '-i', 'rtsp://localhost:8558/stream',
+
+    CACHE_DIR =q_array[4]
+    PERM_DIR = q_array[6]
+    if PERM_DIR[-1] == ';': PERM_DIR = PERM_DIR[:-1]
+    CACHE_MP4 = os.path.join(CACHE_DIR,'camera-%Y%m%d%H%M%S.mp4')
+    RTSP_ADDR = q_array[2]
+
+    ffmpeg_cmd = ['ffmpeg', '-i', RTSP_ADDR,
      '-map', '0', '-c', 'copy', '-f', 'segment', '-segment_time', '5', '-reset_timestamps',
       '1', '-use_wallclock_as_timestamps', '1', '-strftime', '1',
-      '-an', '/media/james/p0/eva_tmp/cache/camera_1-%Y%m%d%H%M%S.mp4'
+      '-an', CACHE_MP4
     ]
+    print(ffmpeg_cmd, PERM_DIR)
+    #scan file
+
     process = sp.Popen(
         ffmpeg_cmd,
         stdout=sp.DEVNULL,
@@ -191,9 +206,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
     start = time.time()   
     elapsed = 0
     while elapsed < 10:
-        #scan file
-        CACHE_DIR = '/media/james/p0/eva_tmp/cache'
-        PERM_DIR =  '/media/james/p0/eva_tmp/perm'
+ 
         cache_files = sorted(
             [
                 d
@@ -216,7 +229,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
                             files_in_use.append(nt.path.split("/")[-1])
             except:
                 continue
-
+    
         for f in cache_files:
         # Skip files currently in use
             if f in files_in_use:
@@ -252,9 +265,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
     process.kill()
     print('ffmep_cmd stop ')
 
-    # scan files
-    CACHE_DIR = '/media/james/p0/eva_tmp/cache'
-    PERM_DIR =  '/media/james/p0/eva_tmp/perm'
+    # last scan
     cache_files = sorted(
         [
             d
@@ -283,6 +294,7 @@ def webcam_execute_query_fetch_all(query, **kwargs) -> Optional[Batch]:
     for f in cache_files:
         # Skip files currently in use
         if f in files_in_use:
+            os.remove(cache_path)
             continue
 
         cache_path = os.path.join(CACHE_DIR, f)
